@@ -1,6 +1,6 @@
 <?php
 $host = 'localhost';
-$db = 'bookstore_db';
+$db = 'tokobook';
 $user = 'root'; 
 $pass = ''; 
 

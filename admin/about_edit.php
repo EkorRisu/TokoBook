@@ -5,14 +5,54 @@ if (!isset($_SESSION['user']) || $_SESSION['user']['role']!=='admin') {
     header('Location: ../login.php'); 
     exit; 
 }
-$file = __DIR__ . '/../data/about.txt';
+
+// Path file data
+$about_text_file = __DIR__ . '/../data/about.txt';
+$about_title_file = __DIR__ . '/../data/about_title.txt';
+$about_image_file = __DIR__ . '/../data/about_image.txt';
+$upload_dir = __DIR__ . '/../assets/';
+
+// Pesan notifikasi
 $msg = '';
-if ($_SERVER['REQUEST_METHOD']==='POST'){
+
+// Ambil data awal
+$content = file_exists($about_text_file) ? file_get_contents($about_text_file) : '';
+$title = file_exists($about_title_file) ? file_get_contents($about_title_file) : 'Tentang TokoBook 📖';
+$image_name = file_exists($about_image_file) ? trim(file_get_contents($about_image_file)) : 'toko.jpg';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Simpan teks dan judul
     $content = $_POST['content'] ?? '';
-    file_put_contents($file, $content);
-    $msg = 'Saved.';
+    $title = $_POST['title'] ?? 'Tentang TokoBook 📖';
+    file_put_contents($about_text_file, $content);
+    file_put_contents($about_title_file, $title);
+
+    // --- Upload gambar baru jika ada ---
+    if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+        $allowed_ext = ['jpg','jpeg','png','gif','webp'];
+        $file_tmp = $_FILES['image']['tmp_name'];
+        $file_name = basename($_FILES['image']['name']);
+        $ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
+
+        if (in_array($ext, $allowed_ext)) {
+            $new_name = 'toko_' . time() . '.' . $ext;
+            $target_path = $upload_dir . $new_name;
+
+            if (move_uploaded_file($file_tmp, $target_path)) {
+                // Simpan nama file ke about_image.txt
+                file_put_contents($about_image_file, $new_name);
+                $image_name = $new_name;
+                $msg = 'Changes and image saved successfully.';
+            } else {
+                $msg = 'Error uploading image.';
+            }
+        } else {
+            $msg = 'Invalid file type. Only JPG, PNG, GIF, WEBP allowed.';
+        }
+    } else {
+        $msg = 'Changes saved successfully.';
+    }
 }
-$content = file_exists($file) ? file_get_contents($file) : '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -41,13 +81,13 @@ $content = file_exists($file) ? file_get_contents($file) : '';
             background-color: #007bff;
             color: white !important;
         }
-        .content {
-            padding: 2rem;
-        }
-        @media (max-width: 991.98px) {
-            .sidebar {
-                min-height: auto;
-            }
+        .content { padding: 2rem; }
+        .preview-img {
+            width: 100%;
+            max-width: 500px;
+            height: 300px;
+            object-fit: cover;
+            border-radius: 10px;
         }
     </style>
 </head>
@@ -92,17 +132,32 @@ $content = file_exists($file) ? file_get_contents($file) : '';
         <div class="container">
             <h2 class="mb-4">Edit About Page</h2>
             <?php if($msg): ?>
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
                     <?php echo htmlspecialchars($msg); ?>
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             <?php endif; ?>
+
             <div class="card shadow-sm p-4">
-                <form method="post">
+                <form method="post" enctype="multipart/form-data">
                     <div class="mb-3">
-                        <label for="content" class="form-label">Content</label>
-                        <textarea class="form-control" id="content" name="content" rows="10"><?php echo htmlspecialchars($content); ?></textarea>
+                        <label for="title" class="form-label">Page Title</label>
+                        <input type="text" id="title" name="title" class="form-control" 
+                               value="<?php echo htmlspecialchars($title); ?>" required>
                     </div>
+
+                    <div class="mb-3">
+                        <label for="content" class="form-label">About Content</label>
+                        <textarea class="form-control" id="content" name="content" rows="10" required><?php echo htmlspecialchars($content); ?></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="image" class="form-label">Gambar </label><br>
+                        <img src="../assets/<?php echo htmlspecialchars($image_name); ?>" class="preview-img mb-3" alt="Current About Image">
+                        <input type="file" name="image" id="image" class="form-control" accept=".jpg,.jpeg,.png,.gif,.webp">
+                        <small class="text-muted">Leave empty if you don't want to change the image.</small>
+                    </div>
+
                     <button type="submit" class="btn btn-primary">Save Changes</button>
                 </form>
             </div>
