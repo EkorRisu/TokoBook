@@ -1,11 +1,20 @@
 <?php
-session_start(); 
+session_start();
 require_once __DIR__.'/../db.php';
-if (!isset($_SESSION['user']) || $_SESSION['user']['role']!=='admin') { 
-    header('Location: ../login.php'); 
-    exit; 
+
+if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
+    header('Location: ../login.php');
+    exit;
 }
+
+// Ambil semua pesan
 $contacts = $pdo->query('SELECT c.*, u.username FROM contacts c LEFT JOIN users u ON c.user_id=u.id ORDER BY c.sent_at DESC')->fetchAll(PDO::FETCH_ASSOC);
+
+// Hitung pesan baru
+$newMessagesCount = $pdo->query('SELECT COUNT(*) FROM contacts WHERE is_read = 0')->fetchColumn();
+
+// Tandai semua pesan sebagai dibaca setelah halaman dibuka
+$pdo->query('UPDATE contacts SET is_read = 1 WHERE is_read = 0');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -34,16 +43,15 @@ $contacts = $pdo->query('SELECT c.*, u.username FROM contacts c LEFT JOIN users 
             background-color: #007bff;
             color: white !important;
         }
-        .content {
-            padding: 2rem;
-        }
-        .table-responsive {
-            margin-top: 1rem;
-        }
-        @media (max-width: 991.98px) {
-            .sidebar {
-                min-height: auto;
-            }
+        .content { padding: 2rem; }
+        .table-responsive { margin-top: 1rem; }
+        .badge-notif {
+            background-color: red;
+            color: white;
+            font-size: 0.75rem;
+            padding: 0.25em 0.5em;
+            border-radius: 10px;
+            margin-left: 4px;
         }
     </style>
 </head>
@@ -61,7 +69,7 @@ $contacts = $pdo->query('SELECT c.*, u.username FROM contacts c LEFT JOIN users 
                     <li class="nav-item"><a class="nav-link" href="../about.php">About</a></li>
                     <li class="nav-item"><a class="nav-link" href="../contact.php">Contact</a></li>
                     <li class="nav-item"><a class="nav-link" href="../cart.php">Cart</a></li>
-                    <li class="nav-item"><a class="nav-link active" aria-current="page" href="dashboard.php">Admin</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="dashboard.php">Admin</a></li>
                     <li class="nav-item"><a class="nav-link" href="../logout.php">Logout (<?php echo htmlspecialchars($_SESSION['user']['username']); ?>)</a></li>
                 </ul>
             </div>
@@ -80,28 +88,43 @@ $contacts = $pdo->query('SELECT c.*, u.username FROM contacts c LEFT JOIN users 
             <li class="nav-item"><a class="nav-link" href="orders.php">Orders</a></li>
             <li class="nav-item"><a class="nav-link" href="report.php">Generate Report (CSV)</a></li>
             <li class="nav-item"><a class="nav-link" href="about_edit.php">Edit About</a></li>
-            <li class="nav-item"><a class="nav-link active" href="contacts.php">Contact Messages</a></li>
+            <li class="nav-item">
+                <a class="nav-link active" href="contacts.php">
+                    Contact Messages 
+                    <span id="messageBadge" class="badge-notif" style="<?php echo $newMessagesCount > 0 ? '' : 'display:none'; ?>">
+                        <?php echo $newMessagesCount; ?>
+                    </span>
+                </a>
+            </li>
         </ul>
     </nav>
 
     <main class="content flex-grow-1">
         <div class="container">
             <h2 class="mb-4">Contact Messages</h2>
+            <div id="alertContainer">
+                <?php if ($newMessagesCount > 0): ?>
+                    <div class="alert alert-info" role="alert">
+                        🔔 Ada <?php echo $newMessagesCount; ?> pesan baru yang belum dibaca!
+                    </div>
+                <?php endif; ?>
+            </div>
+
             <div class="card shadow-sm">
                 <div class="card-body">
                     <div class="table-responsive">
                         <table class="table table-hover">
                             <thead>
                                 <tr>
-                                    <th scope="col">ID</th>
-                                    <th scope="col">User</th>
-                                    <th scope="col">Message</th>
-                                    <th scope="col">Sent At</th>
-                                    <th scope="col">Action</th>
+                                    <th>ID</th>
+                                    <th>User</th>
+                                    <th>Message</th>
+                                    <th>Sent At</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach($contacts as $c): ?>
+                                <?php foreach ($contacts as $c): ?>
                                     <tr>
                                         <td><?php echo $c['id']; ?></td>
                                         <td><?php echo htmlspecialchars($c['username'] ?? 'Guest'); ?></td>
@@ -126,5 +149,33 @@ $contacts = $pdo->query('SELECT c.*, u.username FROM contacts c LEFT JOIN users 
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Fungsi AJAX cek pesan baru
+function checkNewMessages() {
+    fetch('get_new_messages.php')
+        .then(response => response.json())
+        .then(data => {
+            const badge = document.getElementById('messageBadge');
+            const alertContainer = document.getElementById('alertContainer');
+
+            if (data.new_messages > 0) {
+                badge.style.display = 'inline-block';
+                badge.textContent = data.new_messages;
+
+                alertContainer.innerHTML = `
+                    <div class="alert alert-info" role="alert">
+                        🔔 Ada ${data.new_messages} pesan baru yang belum dibaca!
+                    </div>`;
+            } else {
+                badge.style.display = 'none';
+                alertContainer.innerHTML = '';
+            }
+        })
+        .catch(err => console.error('Error checking messages:', err));
+}
+
+// Cek setiap 10 detik
+setInterval(checkNewMessages, 10000);
+</script>
 </body>
 </html>
